@@ -4,3 +4,5 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
+bumpalo = { version = "3.19.0", features = ["std"] }
+dashmap = "6.1.0"
