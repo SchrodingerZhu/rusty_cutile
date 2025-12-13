@@ -5,4 +5,5 @@ edition = "2024"
 
 [dependencies]
 bumpalo = { version = "3.19.0", features = ["std"] }
-dashmap = "6.1.0"
+hashbrown = "0.16.1"
+rustc-hash = { version = "2.1.1", features = ["rand"] }

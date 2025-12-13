@@ -1,6 +1,8 @@
-use std::marker::PhantomData;
-
-use dashmap::DashSet;
+use hashbrown::hash_table::Entry;
+use std::hash::BuildHasher;
+use std::hash::Hash;
+use std::hash::Hasher;
+use std::{cell::RefCell, marker::PhantomData};
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq, Hash)]
 pub enum Integer {
@@ -71,7 +73,7 @@ pub struct PartitionView<'a> {
     pub tile_shape: Box<[usize]>,
     pub original_view: Type<'a>,
     pub dimension_map: Box<[i32]>,
-    pub masked: bool
+    pub masked: bool,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
@@ -103,6 +105,86 @@ impl<'a> std::hash::Hash for Type<'a> {
     }
 }
 
-struct TypeInterner<'a> {
-    set: DashSet<TypeInstance<'a>>,
+pub struct TypeInterner<'a> {
+    ctx_token: InvariantLifetime<'a>,
+    bump: &'a bumpalo::Bump,
+    storage: RefCell<hashbrown::HashTable<&'a TypeInstance<'a>>>,
+    hasher: rustc_hash::FxRandomState,
+}
+
+macro_rules! impl_singleton_types {
+    ($($name:ident => $variant:expr),* $(,)?) => {
+        $(
+            pub fn $name(&self) -> Type<'a> {
+                self.intern($variant)
+            }
+        )*
+    }
+}
+
+impl<'a> TypeInterner<'a> {
+    // # Safety
+    // One should only create one interner per context.
+    pub unsafe fn new(token: InvariantLifetime<'a>, bump: &'a bumpalo::Bump) -> Self {
+        Self {
+            ctx_token: token,
+            bump,
+            storage: RefCell::new(hashbrown::HashTable::new()),
+            hasher: rustc_hash::FxRandomState::default(),
+        }
+    }
+
+    fn intern(&self, ty: TypeInstance<'a>) -> Type<'a> {
+        let mut storage = self.storage.borrow_mut();
+        let hasher = |x: &&TypeInstance<'a>| {
+            let mut hasher = self.hasher.build_hasher();
+            x.hash(&mut hasher);
+            hasher.finish()
+        };
+        let hash = hasher(&&ty);
+        match storage.entry(hash, |x| *x == &ty, hasher) {
+            Entry::Occupied(o) => Type(o.get(), self.ctx_token),
+            Entry::Vacant(v) => {
+                let ty_ref: &'a TypeInstance<'a> = self.bump.alloc(ty);
+                v.insert(ty_ref);
+                Type(ty_ref, self.ctx_token)
+            }
+        }
+    }
+
+    impl_singleton_types! {
+        i1 => TypeInstance::Integer(Integer::I1),
+        i8 => TypeInstance::Integer(Integer::I8),
+        i16 => TypeInstance::Integer(Integer::I16),
+        i32 => TypeInstance::Integer(Integer::I32),
+        i64 => TypeInstance::Integer(Integer::I64),
+        f16 => TypeInstance::Float(IEEEFloat::F16),
+        f32 => TypeInstance::Float(IEEEFloat::F32),
+        f64 => TypeInstance::Float(IEEEFloat::F64),
+        bf16 => TypeInstance::AltFloat(AltFloat::BF16),
+        e3m4 => TypeInstance::AltFloat(AltFloat::E3M4),
+        e5m2 => TypeInstance::AltFloat(AltFloat::E5M2),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    fn with_bump_and_token<F, R>(f: F) -> R
+    where
+        F: for<'a> FnOnce(&'a bumpalo::Bump, InvariantLifetime<'a>) -> R,
+    {
+        let bump = bumpalo::Bump::new();
+        let ctx = PhantomData;
+        f(&bump, ctx)
+    }
+    #[test]
+    fn test_interning() {
+        with_bump_and_token(|bump, token| {
+            let interner = unsafe { TypeInterner::new(token, bump) };
+            let t1 = interner.i32();
+            let t2 = interner.i32();
+            assert_eq!(t1, t2);
+        });
+    }
 }
