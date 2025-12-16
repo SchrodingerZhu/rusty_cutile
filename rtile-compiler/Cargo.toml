@@ -1,0 +1,9 @@
+[package]
+name = "rtile-compiler"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+bumpalo = { version = "3.19.0", features = ["std"] }
+hashbrown = "0.16.1"
+rustc-hash = { version = "2.1.1", features = ["rand"] }

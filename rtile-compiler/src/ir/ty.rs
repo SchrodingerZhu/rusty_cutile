@@ -1,8 +1,10 @@
-use hashbrown::hash_table::Entry;
+use std::cell::RefCell;
 use std::hash::BuildHasher;
 use std::hash::Hash;
 use std::hash::Hasher;
-use std::{cell::RefCell, marker::PhantomData};
+use std::marker::PhantomData;
+
+use hashbrown::hash_table::Entry;
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq, Hash)]
 pub enum Integer {
@@ -170,6 +172,7 @@ impl<'a> TypeInterner<'a> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
     fn with_bump_and_token<F, R>(f: F) -> R
     where
         F: for<'a> FnOnce(&'a bumpalo::Bump, InvariantLifetime<'a>) -> R,
@@ -178,6 +181,7 @@ mod tests {
         let ctx = PhantomData;
         f(&bump, ctx)
     }
+
     #[test]
     fn test_interning() {
         with_bump_and_token(|bump, token| {
