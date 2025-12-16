@@ -1,0 +1,17 @@
+name: Check Code Format
+
+on:
+  push:
+    branches: ["main"]
+  pull_request:
+    branches: ["main"]
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Check Code Format
+        run: cargo fmt -- --check
